@@ -1,0 +1,24 @@
+services:
+  protoc:
+    build:
+      context: .
+      dockerfile: Dockerfile.protoc
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./src:/src
+
+  app:
+    image: golang:1.25-trixie
+    working_dir: /app
+    command: go run main.go
+    ports:
+      - "50051:50051"
+    volumes:
+      - type: bind
+        source: ./src
+        target: /app
+        read_only: true
+    depends_on:
+      protoc:
+        condition: service_completed_successfully
+        required: true

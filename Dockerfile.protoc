@@ -1,0 +1,27 @@
+# Stage 1: Build protoc container
+FROM golang:1.25-trixie AS protoc-builder
+
+RUN apt-get update && \
+    apt-get install -y protobuf-compiler && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# Stage 2: Download proto file
+FROM alpine:latest AS proto-downloader
+
+RUN apk add --no-cache wget
+
+WORKDIR /proto
+RUN wget https://raw.githubusercontent.com/traP-jp/plutus/main/specs/protobuf/cornucopia.proto -O cornucopia.proto
+
+# Stage 3: Generate code
+FROM protoc-builder AS generator
+
+COPY --from=proto-downloader /proto /proto
+
+ENTRYPOINT mkdir -p /src/proto && \
+    protoc --go_out=/src/proto --go_opt=module=github.com/traP-jp/plutus -I/proto cornucopia.proto && \
+    protoc --go-grpc_out=/src/proto --go-grpc_opt=module=github.com/traP-jp/plutus -I/proto cornucopia.proto
