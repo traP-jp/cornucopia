@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/traP-jp/plutus/api/protobuf"
 	"github.com/traP-jp/plutus/system/cornucopia/internal/handler/grpc"
+	"github.com/traP-jp/plutus/system/cornucopia/internal/infrastructure"
 	"github.com/traP-jp/plutus/system/cornucopia/internal/infrastructure/repository"
 	"github.com/traP-jp/plutus/system/cornucopia/internal/usecase"
 )
@@ -34,7 +35,12 @@ func main() {
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		log.Printf("warning: db ping failed: %v", err)
+		log.Fatalf("failed to ping db: %v", err)
+	}
+
+	// Run migrations
+	if err := infrastructure.RunMigrations(db); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
 	}
 
 	// Repositories

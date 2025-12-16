@@ -86,21 +86,21 @@ func (r *MariaDBRepository) getExecutor(ctx context.Context) interface {
 // -- AccountRepository --
 
 func (r *MariaDBRepository) SaveAccount(ctx context.Context, account *domain.Account) error {
-	// Upsert (On Duplicate Key Update) or just Update if exists?
-	// Simplified: Insert or Update.
-	// We'll use INSERT ON DUPLICATE KEY UPDATE for simplicity with MariaDB.
 	query := `
 		INSERT INTO accounts (id, owner_id, balance, can_overdraft) 
 		VALUES (?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE balance = VALUES(balance), can_overdraft = VALUES(can_overdraft)
 	`
-	_, err := r.getExecutor(ctx).ExecContext(ctx, query, uuid.UUID(account.ID), uuid.UUID(account.OwnerID), account.Balance, account.CanOverdraft)
+	idBytes := uuid.UUID(account.ID)
+	ownerIDBytes := uuid.UUID(account.OwnerID)
+	_, err := r.getExecutor(ctx).ExecContext(ctx, query, idBytes[:], ownerIDBytes[:], account.Balance, account.CanOverdraft)
 	return err
 }
 
 func (r *MariaDBRepository) FindAccountByID(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
 	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE id = ?"
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(id))
+	idBytes := uuid.UUID(id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, idBytes[:])
 
 	var idRaw, ownerIDRaw uuid.UUID
 	var acc domain.Account
@@ -117,7 +117,8 @@ func (r *MariaDBRepository) FindAccountByID(ctx context.Context, id domain.Accou
 
 func (r *MariaDBRepository) GetAccountForUpdate(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
 	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE id = ? FOR UPDATE"
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(id))
+	idBytes := uuid.UUID(id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, idBytes[:])
 
 	var idRaw, ownerIDRaw uuid.UUID
 	var acc domain.Account
@@ -134,7 +135,8 @@ func (r *MariaDBRepository) GetAccountForUpdate(ctx context.Context, id domain.A
 
 func (r *MariaDBRepository) FindByOwnerID(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
 	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE owner_id = ?"
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(ownerID))
+	ownerIDBytes := uuid.UUID(ownerID)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, ownerIDBytes[:])
 
 	var idRaw, ownerIDRaw uuid.UUID
 	var acc domain.Account
@@ -151,7 +153,8 @@ func (r *MariaDBRepository) FindByOwnerID(ctx context.Context, ownerID domain.Ow
 
 func (r *MariaDBRepository) FindByOwnerIDForUpdate(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
 	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE owner_id = ? FOR UPDATE"
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(ownerID))
+	ownerIDBytes := uuid.UUID(ownerID)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, ownerIDBytes[:])
 
 	var idRaw, ownerIDRaw uuid.UUID
 	var acc domain.Account
@@ -174,10 +177,14 @@ func (r *MariaDBRepository) SaveJournalEntry(ctx context.Context, tx *domain.Jou
 		(id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
+	// Convert UUIDs to byte slices for BINARY(16) storage.
+	idBytes := uuid.UUID(tx.ID)
+	fromBytes := uuid.UUID(tx.FromAccountID)
+	toBytes := uuid.UUID(tx.ToAccountID)
 	_, err := r.getExecutor(ctx).ExecContext(ctx, query,
-		uuid.UUID(tx.ID),
-		uuid.UUID(tx.FromAccountID),
-		uuid.UUID(tx.ToAccountID),
+		idBytes[:],
+		fromBytes[:],
+		toBytes[:],
 		tx.Amount,
 		tx.Description,
 		tx.IdempotencyKey,
@@ -193,7 +200,8 @@ func (r *MariaDBRepository) FindJournalEntryByID(ctx context.Context, id domain.
 		SELECT id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at 
 		FROM transactions WHERE id = ?
 	`
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(id))
+	idBytes := uuid.UUID(id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, idBytes[:])
 	return scanJournalEntry(row)
 }
 
@@ -207,21 +215,12 @@ func (r *MariaDBRepository) FindByIdempotencyKey(ctx context.Context, key string
 }
 
 func (r *MariaDBRepository) GetLatestJournalEntry(ctx context.Context) (*domain.JournalEntry, error) {
-	// Assuming strict ordering by created_at or an auto-inc sequence.
-	// For hash chain, we usually want the *absolute* last one inserted.
-	// NOTE: Locking mechanism might be needed here to ensure linear appending if high concurrency.
-	// "SELECT ... FOR UPDATE" if inside verification/gap checks.
 	query := `
 		SELECT id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at 
 		FROM transactions 
-		ORDER BY created_at DESC, id DESC 
+		ORDER BY id DESC 
 		LIMIT 1 FOR UPDATE
 	`
-	// FOR UPDATE locks the row, ensuring serialization if referenced in the same TX.
-	// BUT, if the table is empty, FOR UPDATE doesn't lock "the next insert".
-	// For strict Chain, we might need a separate "ChainHead" table to lock.
-	// For this prototype, we'll assume this is "good enough" or use a table lock if desired.
-
 	row := r.getExecutor(ctx).QueryRowContext(ctx, query)
 	return scanJournalEntry(row)
 }
@@ -231,11 +230,11 @@ func (r *MariaDBRepository) FindByAccountID(ctx context.Context, accountID domai
 		SELECT id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at 
 		FROM transactions 
 		WHERE from_account_id = ? OR to_account_id = ?
-		ORDER BY created_at DESC
+		ORDER BY id DESC
 		LIMIT ? OFFSET ?
 	`
-	accIDRaw := uuid.UUID(accountID)
-	rows, err := r.getExecutor(ctx).QueryContext(ctx, query, accIDRaw, accIDRaw, limit, offset)
+	accIDBytes := uuid.UUID(accountID)
+	rows, err := r.getExecutor(ctx).QueryContext(ctx, query, accIDBytes[:], accIDBytes[:], limit, offset)
 	if err != nil {
 		return nil, err
 	}
