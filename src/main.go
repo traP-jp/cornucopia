@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	pb "github.com/traP-jp/cornucopia/proto"
+	pb "github.com/traP-jp/cornucopia/api/protobuf"
 	"google.golang.org/grpc"
 )
 

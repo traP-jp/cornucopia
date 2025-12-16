@@ -22,6 +22,6 @@ FROM protoc-builder AS generator
 
 COPY --from=proto-downloader /proto /proto
 
-ENTRYPOINT mkdir -p /src/proto && \
-    protoc --go_out=/src/proto --go_opt=module=github.com/traP-jp/plutus -I/proto cornucopia.proto && \
-    protoc --go-grpc_out=/src/proto --go-grpc_opt=module=github.com/traP-jp/plutus -I/proto cornucopia.proto
+ENTRYPOINT \
+    protoc --go_out=/src --go_opt=module=github.com/traP-jp/plutus -I/proto cornucopia.proto && \
+    protoc --go-grpc_out=/src --go-grpc_opt=module=github.com/traP-jp/plutus -I/proto cornucopia.proto
