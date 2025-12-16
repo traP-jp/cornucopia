@@ -1,0 +1,286 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
+	"github.com/traP-jp/plutus/system/cornucopia/internal/domain"
+)
+
+type key int
+
+const (
+	txKey key = iota
+)
+
+// MariaDBRepository implements AccountRepository, TransactionRepository, and TransactionManager.
+type MariaDBRepository struct {
+	db *sql.DB
+}
+
+func NewMariaDBRepository(db *sql.DB) *MariaDBRepository {
+	return &MariaDBRepository{db: db}
+}
+
+// -- TransactionManager --
+
+func (r *MariaDBRepository) Run(ctx context.Context, fn func(ctx context.Context) error) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	// Inject tx into context
+	txCtx := context.WithValue(ctx, txKey, tx)
+
+	if err := fn(txCtx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *MariaDBRepository) RunSerialized(ctx context.Context, name string, fn func(ctx context.Context) error) error {
+	conn, err := r.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// 10s timeout for lock acquisition
+	var lockRes sql.NullInt64
+	err = conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, 10)", name).Scan(&lockRes)
+	if err != nil {
+		return err
+	}
+	if !lockRes.Valid || lockRes.Int64 != 1 {
+		// 0 = timeout, NULL = error
+		return fmt.Errorf("failed to acquire lock %s", name)
+	}
+
+	// Ensure unlock happens
+	defer func() {
+		// Use ExecContext to release. The result (1/0) doesn't strictly matter if we are closing,
+		// but best practice to release explicitly.
+		conn.ExecContext(ctx, "SELECT RELEASE_LOCK(?)", name)
+	}()
+
+	return fn(ctx)
+}
+
+func (r *MariaDBRepository) getExecutor(ctx context.Context) interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+} {
+	if tx, ok := ctx.Value(txKey).(*sql.Tx); ok {
+		return tx
+	}
+	return r.db
+}
+
+// -- AccountRepository --
+
+func (r *MariaDBRepository) SaveAccount(ctx context.Context, account *domain.Account) error {
+	query := `
+		INSERT INTO accounts (id, owner_id, balance, can_overdraft) 
+		VALUES (?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE balance = VALUES(balance), can_overdraft = VALUES(can_overdraft)
+	`
+	idBytes := uuid.UUID(account.ID)
+	ownerIDBytes := uuid.UUID(account.OwnerID)
+	_, err := r.getExecutor(ctx).ExecContext(ctx, query, idBytes[:], ownerIDBytes[:], account.Balance, account.CanOverdraft)
+	return err
+}
+
+func (r *MariaDBRepository) FindAccountByID(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
+	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE id = ?"
+	idBytes := uuid.UUID(id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, idBytes[:])
+
+	var idRaw, ownerIDRaw uuid.UUID
+	var acc domain.Account
+	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Not found
+		}
+		return nil, err
+	}
+	acc.ID = domain.AccountID(idRaw)
+	acc.OwnerID = domain.OwnerID(ownerIDRaw)
+	return &acc, nil
+}
+
+func (r *MariaDBRepository) GetAccountForUpdate(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
+	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE id = ? FOR UPDATE"
+	idBytes := uuid.UUID(id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, idBytes[:])
+
+	var idRaw, ownerIDRaw uuid.UUID
+	var acc domain.Account
+	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Not found
+		}
+		return nil, err
+	}
+	acc.ID = domain.AccountID(idRaw)
+	acc.OwnerID = domain.OwnerID(ownerIDRaw)
+	return &acc, nil
+}
+
+func (r *MariaDBRepository) FindByOwnerID(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
+	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE owner_id = ?"
+	ownerIDBytes := uuid.UUID(ownerID)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, ownerIDBytes[:])
+
+	var idRaw, ownerIDRaw uuid.UUID
+	var acc domain.Account
+	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	acc.ID = domain.AccountID(idRaw)
+	acc.OwnerID = domain.OwnerID(ownerIDRaw)
+	return &acc, nil
+}
+
+func (r *MariaDBRepository) FindByOwnerIDForUpdate(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
+	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE owner_id = ? FOR UPDATE"
+	ownerIDBytes := uuid.UUID(ownerID)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, ownerIDBytes[:])
+
+	var idRaw, ownerIDRaw uuid.UUID
+	var acc domain.Account
+	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	acc.ID = domain.AccountID(idRaw)
+	acc.OwnerID = domain.OwnerID(ownerIDRaw)
+	return &acc, nil
+}
+
+// -- JournalEntryRepository --
+
+func (r *MariaDBRepository) SaveJournalEntry(ctx context.Context, tx *domain.JournalEntry) error {
+	query := `
+		INSERT INTO transactions 
+		(id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	// Convert UUIDs to byte slices for BINARY(16) storage.
+	idBytes := uuid.UUID(tx.ID)
+	fromBytes := uuid.UUID(tx.FromAccountID)
+	toBytes := uuid.UUID(tx.ToAccountID)
+	_, err := r.getExecutor(ctx).ExecContext(ctx, query,
+		idBytes[:],
+		fromBytes[:],
+		toBytes[:],
+		tx.Amount,
+		tx.Description,
+		tx.IdempotencyKey,
+		tx.PreviousHash,
+		tx.Hash,
+		tx.Timestamp,
+	)
+	return err
+}
+
+func (r *MariaDBRepository) FindJournalEntryByID(ctx context.Context, id domain.JournalEntryID) (*domain.JournalEntry, error) {
+	query := `
+		SELECT id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at 
+		FROM transactions WHERE id = ?
+	`
+	idBytes := uuid.UUID(id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, idBytes[:])
+	return scanJournalEntry(row)
+}
+
+func (r *MariaDBRepository) FindByIdempotencyKey(ctx context.Context, key string) (*domain.JournalEntry, error) {
+	query := `
+		SELECT id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at 
+		FROM transactions WHERE idempotency_key = ?
+	`
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, key)
+	return scanJournalEntry(row)
+}
+
+func (r *MariaDBRepository) GetLatestJournalEntry(ctx context.Context) (*domain.JournalEntry, error) {
+	query := `
+		SELECT id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at 
+		FROM transactions 
+		ORDER BY id DESC 
+		LIMIT 1 FOR UPDATE
+	`
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query)
+	return scanJournalEntry(row)
+}
+
+func (r *MariaDBRepository) FindByAccountID(ctx context.Context, accountID domain.AccountID, limit, offset int) ([]*domain.JournalEntry, error) {
+	query := `
+		SELECT id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at 
+		FROM transactions 
+		WHERE from_account_id = ? OR to_account_id = ?
+		ORDER BY id DESC
+		LIMIT ? OFFSET ?
+	`
+	accIDBytes := uuid.UUID(accountID)
+	rows, err := r.getExecutor(ctx).QueryContext(ctx, query, accIDBytes[:], accIDBytes[:], limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var txs []*domain.JournalEntry
+	for rows.Next() {
+		var idRaw, fromRaw, toRaw uuid.UUID
+		var tx domain.JournalEntry
+		if err := rows.Scan(&idRaw, &fromRaw, &toRaw, &tx.Amount, &tx.Description, &tx.IdempotencyKey, &tx.PreviousHash, &tx.Hash, &tx.Timestamp); err != nil {
+			return nil, err
+		}
+		tx.ID = domain.JournalEntryID(idRaw)
+		tx.FromAccountID = domain.AccountID(fromRaw)
+		tx.ToAccountID = domain.AccountID(toRaw)
+		txs = append(txs, &tx)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return txs, nil
+}
+
+// Helper to scan single row
+func scanJournalEntry(row *sql.Row) (*domain.JournalEntry, error) {
+	var idRaw, fromRaw, toRaw uuid.UUID
+	var tx domain.JournalEntry
+	err := row.Scan(
+		&idRaw,
+		&fromRaw,
+		&toRaw,
+		&tx.Amount,
+		&tx.Description,
+		&tx.IdempotencyKey,
+		&tx.PreviousHash,
+		&tx.Hash,
+		&tx.Timestamp,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	tx.ID = domain.JournalEntryID(idRaw)
+	tx.FromAccountID = domain.AccountID(fromRaw)
+	tx.ToAccountID = domain.AccountID(toRaw)
+	return &tx, nil
+}
