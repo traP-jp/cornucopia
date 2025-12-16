@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,21 +30,47 @@ func NewCornucopiaHandler(
 	}
 }
 
+func parseAccountID(s string) (domain.AccountID, error) {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return domain.AccountID{}, err
+	}
+	return domain.AccountID(id), nil
+}
+
+func parseOwnerID(s string) (domain.OwnerID, error) {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return domain.OwnerID{}, err
+	}
+	return domain.OwnerID(id), nil
+}
+
 func (h *CornucopiaHandler) CreateAccount(ctx context.Context, req *pb.CreateAccountRequest) (*pb.CreateAccountResponse, error) {
-	acc, err := h.accountUC.CreateAccount(ctx, req.OwnerId, req.CanOverdraft)
+	ownerID, err := parseOwnerID(req.OwnerId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid owner_id")
+	}
+
+	acc, err := h.accountUC.CreateAccount(ctx, ownerID, req.CanOverdraft)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &pb.CreateAccountResponse{
-		AccountId:    string(acc.ID),
-		OwnerId:      string(acc.OwnerID),
+		AccountId:    acc.ID.String(),
+		OwnerId:      acc.OwnerID.String(),
 		Balance:      acc.Balance,
 		CanOverdraft: acc.CanOverdraft,
 	}, nil
 }
 
 func (h *CornucopiaHandler) GetAccount(ctx context.Context, req *pb.GetAccountRequest) (*pb.GetAccountResponse, error) {
-	acc, err := h.accountUC.GetAccount(ctx, req.AccountId)
+	id, err := parseAccountID(req.AccountId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid account_id")
+	}
+
+	acc, err := h.accountUC.GetAccount(ctx, id)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -51,17 +78,26 @@ func (h *CornucopiaHandler) GetAccount(ctx context.Context, req *pb.GetAccountRe
 		return nil, status.Error(codes.NotFound, "account not found")
 	}
 	return &pb.GetAccountResponse{
-		AccountId:    string(acc.ID),
-		OwnerId:      string(acc.OwnerID),
+		AccountId:    acc.ID.String(),
+		OwnerId:      acc.OwnerID.String(),
 		Balance:      acc.Balance,
 		CanOverdraft: acc.CanOverdraft,
 	}, nil
 }
 
 func (h *CornucopiaHandler) Transfer(ctx context.Context, req *pb.TransferRequest) (*pb.TransferResponse, error) {
+	fromID, err := parseAccountID(req.FromAccountId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid from_account_id")
+	}
+	toID, err := parseAccountID(req.ToAccountId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid to_account_id")
+	}
+
 	input := usecase.TransferInput{
-		FromAccountID:  req.FromAccountId,
-		ToAccountID:    req.ToAccountId,
+		FromAccountID:  fromID,
+		ToAccountID:    toID,
 		Amount:         req.Amount,
 		Description:    req.Description,
 		IdempotencyKey: req.IdempotencyKey,
@@ -92,13 +128,19 @@ func (h *CornucopiaHandler) Transfer(ctx context.Context, req *pb.TransferReques
 	}
 
 	return &pb.TransferResponse{
-		JournalEntryId: out.JournalEntryID,
+		JournalEntryId: out.JournalEntryID.String(),
 		CreatedAt:      timestamppb.New(out.CreatedAt),
 	}, nil
 }
 
 func (h *CornucopiaHandler) GetJournalEntries(ctx context.Context, req *pb.GetJournalEntriesRequest) (*pb.GetJournalEntriesResponse, error) {
-	entries, err := h.transferUC.GetJournalEntries(ctx, req.AccountId, int(req.Limit), int(req.Offset))
+	id, err := parseAccountID(req.AccountId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid account_id")
+	}
+
+	entries, err := h.transferUC.GetJournalEntries(ctx, id, int(req.Limit), int(req.Offset))
+
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -106,9 +148,9 @@ func (h *CornucopiaHandler) GetJournalEntries(ctx context.Context, req *pb.GetJo
 	pbEntries := make([]*pb.JournalEntry, len(entries))
 	for i, e := range entries {
 		pbEntries[i] = &pb.JournalEntry{
-			JournalEntryId: string(e.ID),
-			FromAccountId:  string(e.FromAccountID),
-			ToAccountId:    string(e.ToAccountID),
+			JournalEntryId: e.ID.String(),
+			FromAccountId:  e.FromAccountID.String(),
+			ToAccountId:    e.ToAccountID.String(),
 			Amount:         e.Amount,
 			Description:    e.Description,
 			CreatedAt:      timestamppb.New(e.Timestamp),

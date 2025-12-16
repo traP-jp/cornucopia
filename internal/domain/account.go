@@ -1,12 +1,57 @@
 package domain
 
-import "math"
+import (
+	"database/sql/driver"
+	"math"
+
+	"github.com/google/uuid"
+)
 
 // AccountID identifies an account.
-type AccountID string
+type AccountID uuid.UUID
+
+// String returns the string representation of AccountID.
+func (id AccountID) String() string {
+	return uuid.UUID(id).String()
+}
+
+// Value implements driver.Valuer.
+func (id AccountID) Value() (driver.Value, error) {
+	return uuid.UUID(id).Value()
+}
+
+// Scan implements sql.Scanner.
+func (id *AccountID) Scan(src any) error {
+	var u uuid.UUID
+	if err := u.Scan(src); err != nil {
+		return err
+	}
+	*id = AccountID(u)
+	return nil
+}
 
 // OwnerID identifies the owner (user/project) from Pteron.
-type OwnerID string
+type OwnerID uuid.UUID
+
+// String returns the string representation of OwnerID.
+func (id OwnerID) String() string {
+	return uuid.UUID(id).String()
+}
+
+// Value implements driver.Valuer.
+func (id OwnerID) Value() (driver.Value, error) {
+	return uuid.UUID(id).Value()
+}
+
+// Scan implements sql.Scanner.
+func (id *OwnerID) Scan(src any) error {
+	var u uuid.UUID
+	if err := u.Scan(src); err != nil {
+		return err
+	}
+	*id = OwnerID(u)
+	return nil
+}
 
 // Account represents a points account.
 type Account struct {

@@ -19,20 +19,23 @@ func NewAccountUseCase(accountRepo domain.AccountRepository, tm domain.Transacti
 	}
 }
 
-func (u *AccountUseCase) CreateAccount(ctx context.Context, ownerID string, canOverdraft bool) (*domain.Account, error) {
+func (u *AccountUseCase) CreateAccount(ctx context.Context, ownerID domain.OwnerID, canOverdraft bool) (*domain.Account, error) {
 	var acc *domain.Account
 
 	err := u.tm.Run(ctx, func(ctx context.Context) error {
 		// Check existing inside transaction with lock to prevent race conditions
-		existing, err := u.accountRepo.FindByOwnerIDForUpdate(ctx, domain.OwnerID(ownerID))
+		existing, err := u.accountRepo.FindByOwnerIDForUpdate(ctx, ownerID)
 		if err == nil && existing != nil {
 			acc = existing
 			return nil
 		}
 
-		id := uuid.New().String()
-		acc = domain.NewAccount(domain.AccountID(id), domain.OwnerID(ownerID), canOverdraft)
-		
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+		acc = domain.NewAccount(domain.AccountID(id), ownerID, canOverdraft)
+
 		return u.accountRepo.SaveAccount(ctx, acc)
 	})
 
@@ -42,6 +45,6 @@ func (u *AccountUseCase) CreateAccount(ctx context.Context, ownerID string, canO
 	return acc, nil
 }
 
-func (u *AccountUseCase) GetAccount(ctx context.Context, id string) (*domain.Account, error) {
-	return u.accountRepo.FindAccountByID(ctx, domain.AccountID(id))
+func (u *AccountUseCase) GetAccount(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
+	return u.accountRepo.FindAccountByID(ctx, id)
 }

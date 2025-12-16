@@ -5,8 +5,13 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/traP-jp/plutus/system/cornucopia/internal/domain"
 )
+
+func mustUUID(s string) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(s))
+}
 
 type mockAccountRepo struct {
 	accounts map[domain.AccountID]*domain.Account
@@ -67,7 +72,7 @@ func TestAccountUseCase_CreateAccount(t *testing.T) {
 	tm := &mockTxManager{}
 	uc := NewAccountUseCase(repo, tm)
 	ctx := context.Background()
-	ownerID := "user-123"
+	ownerID := domain.OwnerID(mustUUID("user-123"))
 
 	// 1. Create new account
 	acc, err := uc.CreateAccount(ctx, ownerID, false)
@@ -77,7 +82,7 @@ func TestAccountUseCase_CreateAccount(t *testing.T) {
 	if acc == nil {
 		t.Fatal("expected account, got nil")
 	}
-	if string(acc.OwnerID) != ownerID {
+	if acc.OwnerID != ownerID {
 		t.Errorf("expected ownerID %s, got %s", ownerID, acc.OwnerID)
 	}
 	if acc.Balance != 0 {
@@ -101,11 +106,12 @@ func TestAccountUseCase_GetAccount(t *testing.T) {
 	ctx := context.Background()
 
 	// Setup: create an account directly in repo
-	existing := domain.NewAccount("acc-test", "owner-test", false)
+	testID := domain.AccountID(mustUUID("acc-test"))
+	existing := domain.NewAccount(testID, domain.OwnerID(mustUUID("owner-test")), false)
 	repo.SaveAccount(ctx, existing)
 
 	// Test GetAccount
-	found, err := uc.GetAccount(ctx, "acc-test")
+	found, err := uc.GetAccount(ctx, testID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +123,7 @@ func TestAccountUseCase_GetAccount(t *testing.T) {
 	}
 
 	// Test GetAccount non-existent
-	notFound, err := uc.GetAccount(ctx, "acc-unknown")
+	notFound, err := uc.GetAccount(ctx, domain.AccountID(mustUUID("acc-unknown")))
 	if err != nil {
 		// mocked repo returns nil, nil for not found
 	}
@@ -135,7 +141,7 @@ func TestAccountUseCase_RepoError(t *testing.T) {
 
 	// CreateAccount should fail if SaveAccount fails (assuming Find failed or passed)
 	// In current impl, if Find fails, it tries Save. If Save fails, returns error.
-	_, err := uc.CreateAccount(ctx, "user-err", false)
+	_, err := uc.CreateAccount(ctx, domain.OwnerID(mustUUID("user-err")), false)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

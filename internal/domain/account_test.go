@@ -2,15 +2,23 @@ package domain
 
 import (
 	"testing"
+
+	"github.com/google/uuid"
 )
 
+func mustUUID(s string) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(s))
+}
+
 func TestNewAccount(t *testing.T) {
-	acc := NewAccount("acc-1", "owner-1", false)
-	if acc.ID != "acc-1" {
-		t.Errorf("expected ID acc-1, got %s", acc.ID)
+	id := AccountID(mustUUID("acc-1"))
+	owner := OwnerID(mustUUID("owner-1"))
+	acc := NewAccount(id, owner, false)
+	if acc.ID != id {
+		t.Errorf("expected ID %s, got %s", id, acc.ID)
 	}
-	if acc.OwnerID != "owner-1" {
-		t.Errorf("expected OwnerID owner-1, got %s", acc.OwnerID)
+	if acc.OwnerID != owner {
+		t.Errorf("expected OwnerID %s, got %s", owner, acc.OwnerID)
 	}
 	if acc.Balance != 0 {
 		t.Errorf("expected Balance 0, got %d", acc.Balance)
@@ -18,7 +26,10 @@ func TestNewAccount(t *testing.T) {
 }
 
 func TestAccount_Deposit(t *testing.T) {
-	acc := NewAccount("acc-1", "owner-1", false)
+	id := AccountID(mustUUID("acc-1"))
+	owner := OwnerID(mustUUID("owner-1"))
+	acc := NewAccount(id, owner, false)
+
 	acc.Deposit(100)
 	if acc.Balance != 100 {
 		t.Errorf("expected Balance 100, got %d", acc.Balance)
@@ -30,7 +41,10 @@ func TestAccount_Deposit(t *testing.T) {
 }
 
 func TestAccount_Withdraw(t *testing.T) {
-	acc := NewAccount("acc-1", "owner-1", false)
+	id := AccountID(mustUUID("acc-1"))
+	owner := OwnerID(mustUUID("owner-1"))
+	acc := NewAccount(id, owner, false)
+
 	acc.Deposit(100)
 
 	// Successful withdraw
@@ -53,7 +67,10 @@ func TestAccount_Withdraw(t *testing.T) {
 }
 
 func TestAccount_Withdraw_Overdraft(t *testing.T) {
-	acc := NewAccount("acc-od", "owner-od", true)
+	id := AccountID(mustUUID("acc-od"))
+	owner := OwnerID(mustUUID("owner-od"))
+	acc := NewAccount(id, owner, true)
+
 	acc.Deposit(50)
 
 	// Withdraw more than balance

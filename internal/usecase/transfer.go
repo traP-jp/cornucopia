@@ -35,15 +35,15 @@ func NewTransferUseCase(
 }
 
 type TransferInput struct {
-	FromAccountID  string
-	ToAccountID    string
+	FromAccountID  domain.AccountID
+	ToAccountID    domain.AccountID
 	Amount         int64
 	Description    string
 	IdempotencyKey string
 }
 
 type TransferOutput struct {
-	JournalEntryID string
+	JournalEntryID domain.JournalEntryID
 	CreatedAt      time.Time
 }
 
@@ -73,8 +73,8 @@ func (u *TransferUseCase) Transfer(ctx context.Context, input TransferInput) (*T
 
 	if existing != nil {
 		return &TransferOutput{
-			JournalEntryID: string(existing.ID),
-			CreatedAt:     existing.Timestamp,
+			JournalEntryID: existing.ID,
+			CreatedAt:      existing.Timestamp,
 		}, nil
 	}
 
@@ -92,13 +92,13 @@ func (u *TransferUseCase) Transfer(ctx context.Context, input TransferInput) (*T
 
 			// Prevent Deadlock: Lock order must be consistent (e.g., lexical order)
 			firstID, secondID := input.FromAccountID, input.ToAccountID
-			if firstID > secondID {
+			if firstID.String() > secondID.String() {
 				firstID, secondID = secondID, firstID
 			}
 
 			// Helper to load
-			load := func(id string) (*domain.Account, error) {
-				acc, err := u.accountRepo.GetAccountForUpdate(ctx, domain.AccountID(id))
+			load := func(id domain.AccountID) (*domain.Account, error) {
+				acc, err := u.accountRepo.GetAccountForUpdate(ctx, id)
 				if err != nil {
 					return nil, err
 				}
@@ -144,8 +144,12 @@ func (u *TransferUseCase) Transfer(ctx context.Context, input TransferInput) (*T
 				prevHash = latestEntry.Hash
 			}
 
+			id, err := uuid.NewV7()
+			if err != nil {
+				return err
+			}
 			newEntry = &domain.JournalEntry{
-				ID:             domain.JournalEntryID(uuid.New().String()),
+				ID:             domain.JournalEntryID(id),
 				FromAccountID:  from.ID,
 				ToAccountID:    to.ID,
 				Amount:         input.Amount,
@@ -177,12 +181,12 @@ func (u *TransferUseCase) Transfer(ctx context.Context, input TransferInput) (*T
 	}
 
 	return &TransferOutput{
-		JournalEntryID: string(newEntry.ID),
+		JournalEntryID: newEntry.ID,
 		CreatedAt:      newEntry.Timestamp,
 	}, nil
 }
 
-func (u *TransferUseCase) GetJournalEntries(ctx context.Context, accountID string, limit, offset int) ([]*domain.JournalEntry, error) {
+func (u *TransferUseCase) GetJournalEntries(ctx context.Context, accountID domain.AccountID, limit, offset int) ([]*domain.JournalEntry, error) {
 	// Validate and normalize limit/offset
 	if limit <= 0 {
 		limit = 50
@@ -193,6 +197,6 @@ func (u *TransferUseCase) GetJournalEntries(ctx context.Context, accountID strin
 	if offset < 0 {
 		offset = 0
 	}
-	
-	return u.repo.FindByAccountID(ctx, domain.AccountID(accountID), limit, offset)
+
+	return u.repo.FindByAccountID(ctx, accountID, limit, offset)
 }
