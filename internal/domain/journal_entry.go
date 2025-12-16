@@ -2,7 +2,6 @@ package domain
 
 import (
 	"crypto/sha256"
-	"database/sql/driver"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -16,21 +15,6 @@ type JournalEntryID uuid.UUID
 // String returns the string representation of JournalEntryID.
 func (id JournalEntryID) String() string {
 	return uuid.UUID(id).String()
-}
-
-// Value implements driver.Valuer.
-func (id JournalEntryID) Value() (driver.Value, error) {
-	return uuid.UUID(id).Value()
-}
-
-// Scan implements sql.Scanner.
-func (id *JournalEntryID) Scan(src any) error {
-	var u uuid.UUID
-	if err := u.Scan(src); err != nil {
-		return err
-	}
-	*id = JournalEntryID(u)
-	return nil
 }
 
 // JournalEntry represents an immutable record of money movement.

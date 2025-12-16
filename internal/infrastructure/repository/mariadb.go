@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	"github.com/traP-jp/plutus/system/cornucopia/internal/domain"
 )
 
@@ -42,8 +43,6 @@ func (r *MariaDBRepository) Run(ctx context.Context, fn func(ctx context.Context
 
 	return tx.Commit()
 }
-
-
 
 func (r *MariaDBRepository) RunSerialized(ctx context.Context, name string, fn func(ctx context.Context) error) error {
 	conn, err := r.db.Conn(ctx)
@@ -95,63 +94,75 @@ func (r *MariaDBRepository) SaveAccount(ctx context.Context, account *domain.Acc
 		VALUES (?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE balance = VALUES(balance), can_overdraft = VALUES(can_overdraft)
 	`
-	_, err := r.getExecutor(ctx).ExecContext(ctx, query, account.ID, account.OwnerID, account.Balance, account.CanOverdraft)
+	_, err := r.getExecutor(ctx).ExecContext(ctx, query, uuid.UUID(account.ID), uuid.UUID(account.OwnerID), account.Balance, account.CanOverdraft)
 	return err
 }
 
 func (r *MariaDBRepository) FindAccountByID(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
 	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE id = ?"
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(id))
 
+	var idRaw, ownerIDRaw uuid.UUID
 	var acc domain.Account
-	if err := row.Scan(&acc.ID, &acc.OwnerID, &acc.Balance, &acc.CanOverdraft); err != nil {
+	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // Not found
 		}
 		return nil, err
 	}
+	acc.ID = domain.AccountID(idRaw)
+	acc.OwnerID = domain.OwnerID(ownerIDRaw)
 	return &acc, nil
 }
 
 func (r *MariaDBRepository) GetAccountForUpdate(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
 	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE id = ? FOR UPDATE"
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(id))
 
+	var idRaw, ownerIDRaw uuid.UUID
 	var acc domain.Account
-	if err := row.Scan(&acc.ID, &acc.OwnerID, &acc.Balance, &acc.CanOverdraft); err != nil {
+	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // Not found
 		}
 		return nil, err
 	}
+	acc.ID = domain.AccountID(idRaw)
+	acc.OwnerID = domain.OwnerID(ownerIDRaw)
 	return &acc, nil
 }
 
 func (r *MariaDBRepository) FindByOwnerID(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
 	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE owner_id = ?"
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, ownerID)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(ownerID))
 
+	var idRaw, ownerIDRaw uuid.UUID
 	var acc domain.Account
-	if err := row.Scan(&acc.ID, &acc.OwnerID, &acc.Balance, &acc.CanOverdraft); err != nil {
+	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+	acc.ID = domain.AccountID(idRaw)
+	acc.OwnerID = domain.OwnerID(ownerIDRaw)
 	return &acc, nil
 }
 
 func (r *MariaDBRepository) FindByOwnerIDForUpdate(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
 	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE owner_id = ? FOR UPDATE"
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, ownerID)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(ownerID))
 
+	var idRaw, ownerIDRaw uuid.UUID
 	var acc domain.Account
-	if err := row.Scan(&acc.ID, &acc.OwnerID, &acc.Balance, &acc.CanOverdraft); err != nil {
+	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+	acc.ID = domain.AccountID(idRaw)
+	acc.OwnerID = domain.OwnerID(ownerIDRaw)
 	return &acc, nil
 }
 
@@ -164,9 +175,9 @@ func (r *MariaDBRepository) SaveJournalEntry(ctx context.Context, tx *domain.Jou
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.getExecutor(ctx).ExecContext(ctx, query,
-		tx.ID,
-		tx.FromAccountID,
-		tx.ToAccountID,
+		uuid.UUID(tx.ID),
+		uuid.UUID(tx.FromAccountID),
+		uuid.UUID(tx.ToAccountID),
 		tx.Amount,
 		tx.Description,
 		tx.IdempotencyKey,
@@ -182,7 +193,7 @@ func (r *MariaDBRepository) FindJournalEntryByID(ctx context.Context, id domain.
 		SELECT id, from_account_id, to_account_id, amount, description, idempotency_key, prev_hash, hash, created_at 
 		FROM transactions WHERE id = ?
 	`
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, id)
+	row := r.getExecutor(ctx).QueryRowContext(ctx, query, uuid.UUID(id))
 	return scanJournalEntry(row)
 }
 
@@ -205,12 +216,12 @@ func (r *MariaDBRepository) GetLatestJournalEntry(ctx context.Context) (*domain.
 		FROM transactions 
 		ORDER BY created_at DESC, id DESC 
 		LIMIT 1 FOR UPDATE
-	` 
+	`
 	// FOR UPDATE locks the row, ensuring serialization if referenced in the same TX.
 	// BUT, if the table is empty, FOR UPDATE doesn't lock "the next insert".
 	// For strict Chain, we might need a separate "ChainHead" table to lock.
 	// For this prototype, we'll assume this is "good enough" or use a table lock if desired.
-	
+
 	row := r.getExecutor(ctx).QueryRowContext(ctx, query)
 	return scanJournalEntry(row)
 }
@@ -223,7 +234,8 @@ func (r *MariaDBRepository) FindByAccountID(ctx context.Context, accountID domai
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
 	`
-	rows, err := r.getExecutor(ctx).QueryContext(ctx, query, accountID, accountID, limit, offset)
+	accIDRaw := uuid.UUID(accountID)
+	rows, err := r.getExecutor(ctx).QueryContext(ctx, query, accIDRaw, accIDRaw, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -231,10 +243,14 @@ func (r *MariaDBRepository) FindByAccountID(ctx context.Context, accountID domai
 
 	var txs []*domain.JournalEntry
 	for rows.Next() {
+		var idRaw, fromRaw, toRaw uuid.UUID
 		var tx domain.JournalEntry
-		if err := rows.Scan(&tx.ID, &tx.FromAccountID, &tx.ToAccountID, &tx.Amount, &tx.Description, &tx.IdempotencyKey, &tx.PreviousHash, &tx.Hash, &tx.Timestamp); err != nil {
+		if err := rows.Scan(&idRaw, &fromRaw, &toRaw, &tx.Amount, &tx.Description, &tx.IdempotencyKey, &tx.PreviousHash, &tx.Hash, &tx.Timestamp); err != nil {
 			return nil, err
 		}
+		tx.ID = domain.JournalEntryID(idRaw)
+		tx.FromAccountID = domain.AccountID(fromRaw)
+		tx.ToAccountID = domain.AccountID(toRaw)
 		txs = append(txs, &tx)
 	}
 	if err := rows.Err(); err != nil {
@@ -245,11 +261,12 @@ func (r *MariaDBRepository) FindByAccountID(ctx context.Context, accountID domai
 
 // Helper to scan single row
 func scanJournalEntry(row *sql.Row) (*domain.JournalEntry, error) {
+	var idRaw, fromRaw, toRaw uuid.UUID
 	var tx domain.JournalEntry
 	err := row.Scan(
-		&tx.ID,
-		&tx.FromAccountID,
-		&tx.ToAccountID,
+		&idRaw,
+		&fromRaw,
+		&toRaw,
 		&tx.Amount,
 		&tx.Description,
 		&tx.IdempotencyKey,
@@ -263,5 +280,8 @@ func scanJournalEntry(row *sql.Row) (*domain.JournalEntry, error) {
 		}
 		return nil, err
 	}
+	tx.ID = domain.JournalEntryID(idRaw)
+	tx.FromAccountID = domain.AccountID(fromRaw)
+	tx.ToAccountID = domain.AccountID(toRaw)
 	return &tx, nil
 }

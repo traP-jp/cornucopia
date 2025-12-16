@@ -22,17 +22,17 @@ func main() {
 	dbUser := os.Getenv("MYSQL_USER")
 	dbPass := os.Getenv("MYSQL_PASSWORD")
 	dbName := os.Getenv("MYSQL_DATABASE")
-	dbHost := "localhost" // or use env
+	dbHost := os.Getenv("MYSQL_HOST")
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:3306)/%s?parseTime=true", dbUser, dbPass, dbHost, dbName)
-	
+
 	// Database
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		log.Fatalf("failed to open db: %v", err)
 	}
 	defer db.Close()
-	
+
 	if err := db.Ping(); err != nil {
 		log.Printf("warning: db ping failed: %v", err)
 	}
