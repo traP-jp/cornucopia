@@ -8,7 +8,6 @@ package cornucopia
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -135,7 +134,7 @@ func RegisterCornucopiaServiceServer(s grpc.ServiceRegistrar, srv CornucopiaServ
 	s.RegisterService(&CornucopiaService_ServiceDesc, srv)
 }
 
-func _CornucopiaService_CreateAccount_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
+func _CornucopiaService_CreateAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateAccountRequest)
 	if err := dec(in); err != nil {
 		return nil, err

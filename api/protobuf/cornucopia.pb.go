@@ -24,8 +24,8 @@ const (
 
 type CreateAccountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	OwnerId       string                 `protobuf:"bytes,1,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"` // User or Project ID from Dashboard
-	CanOverdraft  bool                   `protobuf:"varint,2,opt,name=can_overdraft,json=canOverdraft,proto3" json:"can_overdraft,omitempty"`
+	OwnerId       string                 `protobuf:"bytes,1,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`                 // User or Project ID from Dashboard
+	CanOverdraft  bool                   `protobuf:"varint,2,opt,name=can_overdraft,json=canOverdraft,proto3" json:"can_overdraft,omitempty"` // Whether the account can go negative
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -623,8 +623,8 @@ const file_cornucopia_proto_rawDesc = "" +
 	"\n" +
 	"GetAccount\x12\x19.plutus.GetAccountRequest\x1a\x1a.plutus.GetAccountResponse\"\x00\x12?\n" +
 	"\bTransfer\x12\x17.plutus.TransferRequest\x1a\x18.plutus.TransferResponse\"\x00\x12Z\n" +
-	"\x11GetJournalEntries\x12 .plutus.GetJournalEntriesRequest\x1a!.plutus.GetJournalEntriesResponse\"\x00BM\n" +
-	"\x0ejp.trap.plutusB\x06PlutusP\x01Z1github.com/traP-jp/plutus/api/protobuf;cornucopiab\x06proto3"
+	"\x11GetJournalEntries\x12 .plutus.GetJournalEntriesRequest\x1a!.plutus.GetJournalEntriesResponse\"\x00BQ\n" +
+	"\x12jp.trap.plutus.apiB\x06PlutusP\x01Z1github.com/traP-jp/plutus/api/protobuf;cornucopiab\x06proto3"
 
 var (
 	file_cornucopia_proto_rawDescOnce sync.Once

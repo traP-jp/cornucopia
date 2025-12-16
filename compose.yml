@@ -10,6 +10,14 @@ services:
       MYSQL_USER: user
       MYSQL_PASSWORD: password
       MYSQL_DATABASE: cornucopia
+    volumes:
+      - type: bind
+        source: ./src
+        target: /src
+        read_only: true
+      - type: bind
+        source: ./api
+        target: /api
     depends_on:
       mariadb:
         condition: service_healthy
