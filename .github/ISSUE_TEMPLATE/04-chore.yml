@@ -1,0 +1,39 @@
+name: "Chore"
+description: "ビルド設定、依存関係の更新、ドキュメント修正など、製品コード以外の変更"
+title: "[Chore] "
+labels: ["type/chore", "area/server", "need/triage"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: "Overview"
+      description: "どのような作業を行うか"
+      placeholder: |
+        開発用のSeedデータに「いいね」のダミーデータを追加する
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: "Impact"
+      description: "この変更による影響範囲やリスク"
+      placeholder: |
+        フロントエンドチームが、API連携テストをする際に、最初からデータが入っている状態で確認できるようになる。
+
+  - type: textarea
+    id: dev-tasks
+    attributes:
+      label: "Tasks"
+      description: "具体的な作業内容"
+      placeholder: |
+        - [ ] `prisma/seed.ts` の更新
+        - [ ] ユーザー10人、記事20件、ランダムにいいねが付与されるロジックを追加
+        - [ ] `npm run seed` の動作確認
+
+  - type: textarea
+    id: references
+    attributes:
+      label: "References"
+      description: "関連情報や関連issue等あれば"
+      placeholder: |
+        - #1234
+        - traP-jp/plutus#123456

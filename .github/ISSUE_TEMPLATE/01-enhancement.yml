@@ -1,0 +1,42 @@
+name: "Enhancement"
+description: "新しい機能や既存機能の改善を提案"
+title: "[Enhancement] "
+labels: ["type/enhancement", "area/server", "need/triage"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: "Overview"
+      description: "どのような機能改善をしたいか、簡潔な概要"
+      placeholder: |
+        「いいね」機能を保存するための `likes` テーブルとAPIを作成する
+
+  - type: textarea
+    id: dev-tasks
+    attributes:
+      label: "Tasks"
+      description: "実装に必要なタスク"
+      placeholder: |
+        - [ ] DB設計: `likes` テーブル (user_id, article_id) のマイグレーション作成
+        - [ ] API実装: POST `/api/articles/:id/like` のエンドポイント作成
+        - [ ] API実装: DELETE `/api/articles/:id/like` (いいね解除)
+        - [ ] Swagger / API仕様書の更新
+
+  - type: textarea
+    id: details
+    attributes:
+      label: "Details"
+      description: "補足したい背景・検討内容・設計メモなど"
+      placeholder: |
+        - 認証必須 (JWTの検証ミドルウェアを通すこと)
+        - 1ユーザーにつき1記事1回まで（DBでユニーク制約をつける）
+        - レスポンスには現在の総いいね数を含めて返すとフロントが楽かも。
+
+  - type: textarea
+    id: references
+    attributes:
+      label: "References"
+      description: "関連情報や関連issue等あれば"
+      placeholder: |
+        - #1234
+        - traP-jp/plutus#123456
