@@ -18,15 +18,13 @@
    go run cmd/cornucopia/main.go
    ```
 
-## gRPCコード生成
+プロトコルバッファ定義（[upstream](https://raw.githubusercontent.com/traP-jp/plutus/main/specs/protobuf/cornucopia.proto)）からコードを生成するには以下を実行します。
 
-プロトコルバッファ定義（`../../specs/protobuf`）に変更があった場合は以下を実行してください。
+### 生成方法
+
+Goスクリプト（`cmd/genproto`）を使用してコード生成を行います。
+ローカルに `protoc` がない場合は Docker を使用します。
 
 ```bash
-# ツールのインストール
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-
-# 生成実行
-protoc -I ../../specs/protobuf --go_out=api/protobuf --go_opt=paths=source_relative --go-grpc_out=api/protobuf --go-grpc_opt=paths=source_relative ../../specs/protobuf/cornucopia.proto
+go run cmd/genproto/main.go
 ```
