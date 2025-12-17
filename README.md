@@ -1,5 +1,7 @@
 # Cornucopia
 
+<img width="512" height="512" alt="24_20251214231141" src="https://github.com/user-attachments/assets/9ee12975-fd79-48b2-9449-280335569e77" />
+
 ## 必要要件
 
 - Go 1.25.5
