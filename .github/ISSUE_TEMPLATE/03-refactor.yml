@@ -1,0 +1,56 @@
+name: "Refactoring"
+description: "ユーザーから見える動作は変えずに、コードの品質を向上させるための提案"
+title: "[Refactor] "
+labels: ["type/refactoring", "area/server", "need/triage"]
+body:
+  - type: textarea
+    id: overview
+    attributes:
+      label: "Overview"
+      description: "どの部分のコードをどのように改善したいか、簡潔な概要"
+      placeholder: |
+        記事一覧取得時の「いいね数」カウントにおけるN+1問題を解消する
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: "Reason"
+      description: "なぜ、改善したいのか（保守性、可読性、パフォーマンス等）"
+      placeholder: |
+        現在、記事ごとに `count(*)` クエリが走っており、一覧表示のAPIレスポンスが遅くなっているため。
+
+  - type: textarea
+    id: suggested-fix
+    attributes:
+      label: "Proposed Changes"
+      description: "どのようにコードを変更する予定か"
+      placeholder: |
+        ex. SQLの `JOIN` と `GROUP BY` を使って一括でカウントするようにクエリを書き換える。
+        ex. あるいは、`articles` テーブルに `likes_count` カラムを追加し、非正規化する（書き込み時にインクリメント）。
+
+  - type: textarea
+    id: dev-tasks
+    attributes:
+      label: "Tasks"
+      description: "必要ならタスクを分割"
+      placeholder: |
+        - [ ] Repository層のクエリ修正
+        - [ ] 負荷テスト / 実行速度の計測
+        - [ ] 既存のテストが通ることの確認
+
+  - type: textarea
+    id: details
+    attributes:
+      label: "Details"
+      description: "その他補足情報"
+      placeholder: |
+        Swaggerの定義考えないといけない
+
+  - type: textarea
+    id: references
+    attributes:
+      label: "References"
+      description: "関連情報や関連issue等あれば"
+      placeholder: |
+        - #1234
+        - traP-jp/plutus#123456
