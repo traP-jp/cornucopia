@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
@@ -112,6 +113,48 @@ func (r *MariaDBRepository) FindAccountByID(ctx context.Context, id domain.Accou
 	acc.ID = domain.AccountID(idRaw)
 	return &acc, nil
 }
+
+func (r *MariaDBRepository) FindAccountsByIDs(ctx context.Context, ids []domain.AccountID) ([]*domain.Account, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		idBytes := uuid.UUID(id)
+		args[i] = idBytes[:]
+	}
+
+	query := fmt.Sprintf(
+		"SELECT id, balance, can_overdraft FROM accounts WHERE id IN (%s)",
+		strings.Join(placeholders, ","),
+	)
+
+	rows, err := r.getExecutor(ctx).QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accounts []*domain.Account
+	for rows.Next() {
+		var idRaw uuid.UUID
+		var acc domain.Account
+		if err := rows.Scan(&idRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
+			return nil, err
+		}
+		acc.ID = domain.AccountID(idRaw)
+		accounts = append(accounts, &acc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return accounts, nil
+}
+
 
 func (r *MariaDBRepository) GetAccountForUpdate(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
 	query := "SELECT id, balance, can_overdraft FROM accounts WHERE id = ? FOR UPDATE"

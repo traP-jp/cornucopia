@@ -64,6 +64,16 @@ func (m *mockAccountRepo) ListAccounts(ctx context.Context, filter domain.Accoun
 	return result, totalCount, nil
 }
 
+func (m *mockAccountRepo) FindAccountsByIDs(ctx context.Context, ids []domain.AccountID) ([]*domain.Account, error) {
+	var result []*domain.Account
+	for _, id := range ids {
+		if acc, ok := m.accounts[id]; ok {
+			result = append(result, acc)
+		}
+	}
+	return result, nil
+}
+
 type mockJournalEntryRepo struct {
 	entries []*domain.JournalEntry
 }

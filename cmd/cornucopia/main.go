@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	google_grpc "google.golang.org/grpc"
@@ -53,13 +54,24 @@ func main() {
 	// Handlers
 	h := grpc.NewCornucopiaHandler(transferUC, accountUC)
 
+	// API Key Authentication
+	var apiKeys []string
+	if keysEnv := os.Getenv("API_KEYS"); keysEnv != "" {
+		apiKeys = strings.Split(keysEnv, ",")
+		log.Printf("API key authentication enabled with %d key(s)", len(apiKeys))
+	} else {
+		log.Println("WARNING: API_KEYS not set, authentication disabled")
+	}
+
 	// gRPC Server
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	s := google_grpc.NewServer()
+	s := google_grpc.NewServer(
+		google_grpc.UnaryInterceptor(grpc.APIKeyAuthInterceptor(apiKeys)),
+	)
 	pb.RegisterCornucopiaServiceServer(s, h)
 	reflection.Register(s)
 

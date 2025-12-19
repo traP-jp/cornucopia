@@ -35,6 +35,7 @@ type AccountSort struct {
 type AccountRepository interface {
 	SaveAccount(ctx context.Context, account *Account) error
 	FindAccountByID(ctx context.Context, id AccountID) (*Account, error)
+	FindAccountsByIDs(ctx context.Context, ids []AccountID) ([]*Account, error)
 	GetAccountForUpdate(ctx context.Context, id AccountID) (*Account, error)
 	// ListAccounts returns accounts matching the filter with pagination and sorting.
 	// Returns (accounts, total_count, error).

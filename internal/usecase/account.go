@@ -81,3 +81,8 @@ func (u *AccountUseCase) ListAccounts(ctx context.Context, input ListAccountsInp
 		TotalCount: totalCount,
 	}, nil
 }
+
+// GetAccounts returns accounts by their IDs.
+func (u *AccountUseCase) GetAccounts(ctx context.Context, ids []domain.AccountID) ([]*domain.Account, error) {
+	return u.accountRepo.FindAccountsByIDs(ctx, ids)
+}

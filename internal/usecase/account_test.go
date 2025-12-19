@@ -78,6 +78,19 @@ func (m *mockAccountRepo) ListAccounts(ctx context.Context, filter domain.Accoun
 	return result, totalCount, nil
 }
 
+func (m *mockAccountRepo) FindAccountsByIDs(ctx context.Context, ids []domain.AccountID) ([]*domain.Account, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []*domain.Account
+	for _, id := range ids {
+		if acc, ok := m.accounts[id]; ok {
+			result = append(result, acc)
+		}
+	}
+	return result, nil
+}
+
 // mockTxManager is defined in transfer_test.go
 
 func TestAccountUseCase_CreateAccount(t *testing.T) {

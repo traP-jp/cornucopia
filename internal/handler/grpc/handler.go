@@ -146,3 +146,89 @@ func (h *CornucopiaHandler) GetJournalEntries(ctx context.Context, req *pb.GetJo
 		JournalEntries: pbEntries,
 	}, nil
 }
+
+func (h *CornucopiaHandler) GetAccounts(ctx context.Context, req *pb.GetAccountsRequest) (*pb.GetAccountsResponse, error) {
+	ids := make([]domain.AccountID, 0, len(req.AccountIds))
+	for _, idStr := range req.AccountIds {
+		id, err := parseAccountID(idStr)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid account_id: "+idStr)
+		}
+		ids = append(ids, id)
+	}
+
+	accounts, err := h.accountUC.GetAccounts(ctx, ids)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	pbAccounts := make([]*pb.Account, len(accounts))
+	for i, acc := range accounts {
+		pbAccounts[i] = &pb.Account{
+			AccountId:    acc.ID.String(),
+			Balance:      acc.Balance,
+			CanOverdraft: acc.CanOverdraft,
+		}
+	}
+
+	return &pb.GetAccountsResponse{
+		Accounts: pbAccounts,
+	}, nil
+}
+
+func (h *CornucopiaHandler) ListAccounts(ctx context.Context, req *pb.ListAccountsRequest) (*pb.ListAccountsResponse, error) {
+	// Build filter
+	filter := domain.AccountFilter{}
+	if req.MinBalance != nil {
+		filter.MinBalance = req.MinBalance
+	}
+	if req.MaxBalance != nil {
+		filter.MaxBalance = req.MaxBalance
+	}
+	if req.CanOverdraft != nil {
+		filter.CanOverdraft = req.CanOverdraft
+	}
+
+	// Build sort
+	sort := domain.AccountSort{}
+	switch req.SortField {
+	case pb.SortField_SORT_FIELD_BALANCE:
+		sort.Field = domain.SortByBalance
+	case pb.SortField_SORT_FIELD_ACCOUNT_ID:
+		sort.Field = domain.SortByAccountID
+	default:
+		sort.Field = domain.SortByAccountID
+	}
+	switch req.SortOrder {
+	case pb.SortOrder_SORT_ORDER_DESC:
+		sort.Order = domain.SortDesc
+	default:
+		sort.Order = domain.SortAsc
+	}
+
+	input := usecase.ListAccountsInput{
+		Filter: filter,
+		Sort:   sort,
+		Limit:  int(req.Limit),
+		Offset: int(req.Offset),
+	}
+
+	out, err := h.accountUC.ListAccounts(ctx, input)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	pbAccounts := make([]*pb.Account, len(out.Accounts))
+	for i, acc := range out.Accounts {
+		pbAccounts[i] = &pb.Account{
+			AccountId:    acc.ID.String(),
+			Balance:      acc.Balance,
+			CanOverdraft: acc.CanOverdraft,
+		}
+	}
+
+	return &pb.ListAccountsResponse{
+		Accounts:   pbAccounts,
+		TotalCount: int32(out.TotalCount),
+	}, nil
+}
