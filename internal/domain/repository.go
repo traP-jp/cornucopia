@@ -2,14 +2,43 @@ package domain
 
 import "context"
 
+// SortField represents the field to sort by.
+type SortField string
+
+const (
+	SortByBalance   SortField = "balance"
+	SortByAccountID SortField = "account_id"
+)
+
+// SortOrder represents the sort direction.
+type SortOrder string
+
+const (
+	SortAsc  SortOrder = "asc"
+	SortDesc SortOrder = "desc"
+)
+
+// AccountFilter represents query filters for listing accounts.
+type AccountFilter struct {
+	MinBalance   *int64
+	MaxBalance   *int64
+	CanOverdraft *bool
+}
+
+// AccountSort represents sorting options for listing accounts.
+type AccountSort struct {
+	Field SortField
+	Order SortOrder
+}
+
 // AccountRepository manages Account persistence.
 type AccountRepository interface {
 	SaveAccount(ctx context.Context, account *Account) error
 	FindAccountByID(ctx context.Context, id AccountID) (*Account, error)
 	GetAccountForUpdate(ctx context.Context, id AccountID) (*Account, error)
-	FindByOwnerID(ctx context.Context, ownerID OwnerID) (*Account, error)
-	// FindByOwnerIDForUpdate locks the row for update to prevent race conditions.
-	FindByOwnerIDForUpdate(ctx context.Context, ownerID OwnerID) (*Account, error)
+	// ListAccounts returns accounts matching the filter with pagination and sorting.
+	// Returns (accounts, total_count, error).
+	ListAccounts(ctx context.Context, filter AccountFilter, sort AccountSort, limit, offset int) ([]*Account, int, error)
 }
 
 // JournalEntryRepository manages JournalEntry persistence.

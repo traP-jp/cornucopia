@@ -38,27 +38,13 @@ func parseAccountID(s string) (domain.AccountID, error) {
 	return domain.AccountID(id), nil
 }
 
-func parseOwnerID(s string) (domain.OwnerID, error) {
-	id, err := uuid.Parse(s)
-	if err != nil {
-		return domain.OwnerID{}, err
-	}
-	return domain.OwnerID(id), nil
-}
-
 func (h *CornucopiaHandler) CreateAccount(ctx context.Context, req *pb.CreateAccountRequest) (*pb.CreateAccountResponse, error) {
-	ownerID, err := parseOwnerID(req.OwnerId)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid owner_id")
-	}
-
-	acc, err := h.accountUC.CreateAccount(ctx, ownerID, req.CanOverdraft)
+	acc, err := h.accountUC.CreateAccount(ctx, req.CanOverdraft)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &pb.CreateAccountResponse{
 		AccountId:    acc.ID.String(),
-		OwnerId:      acc.OwnerID.String(),
 		Balance:      acc.Balance,
 		CanOverdraft: acc.CanOverdraft,
 	}, nil
@@ -79,7 +65,6 @@ func (h *CornucopiaHandler) GetAccount(ctx context.Context, req *pb.GetAccountRe
 	}
 	return &pb.GetAccountResponse{
 		AccountId:    acc.ID.String(),
-		OwnerId:      acc.OwnerID.String(),
 		Balance:      acc.Balance,
 		CanOverdraft: acc.CanOverdraft,
 	}, nil

@@ -89,11 +89,11 @@ func TestTransferUseCase_Transfer(t *testing.T) {
 	fromID := domain.AccountID(mustUUID("acc-from"))
 	toID := domain.AccountID(mustUUID("acc-to"))
 
-	fromAcc := domain.NewAccount(fromID, domain.OwnerID(mustUUID("owner-1")), false)
+	fromAcc := domain.NewAccount(fromID, false)
 	fromAcc.Balance = 1000
 	accRepo.SaveAccount(ctx, fromAcc)
 
-	toAcc := domain.NewAccount(toID, domain.OwnerID(mustUUID("owner-2")), false)
+	toAcc := domain.NewAccount(toID, false)
 	accRepo.SaveAccount(ctx, toAcc)
 
 	// 1. Success Transfer

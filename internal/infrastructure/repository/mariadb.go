@@ -87,86 +87,123 @@ func (r *MariaDBRepository) getExecutor(ctx context.Context) interface {
 
 func (r *MariaDBRepository) SaveAccount(ctx context.Context, account *domain.Account) error {
 	query := `
-		INSERT INTO accounts (id, owner_id, balance, can_overdraft) 
-		VALUES (?, ?, ?, ?)
+		INSERT INTO accounts (id, balance, can_overdraft) 
+		VALUES (?, ?, ?)
 		ON DUPLICATE KEY UPDATE balance = VALUES(balance), can_overdraft = VALUES(can_overdraft)
 	`
 	idBytes := uuid.UUID(account.ID)
-	ownerIDBytes := uuid.UUID(account.OwnerID)
-	_, err := r.getExecutor(ctx).ExecContext(ctx, query, idBytes[:], ownerIDBytes[:], account.Balance, account.CanOverdraft)
+	_, err := r.getExecutor(ctx).ExecContext(ctx, query, idBytes[:], account.Balance, account.CanOverdraft)
 	return err
 }
 
 func (r *MariaDBRepository) FindAccountByID(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
-	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE id = ?"
+	query := "SELECT id, balance, can_overdraft FROM accounts WHERE id = ?"
 	idBytes := uuid.UUID(id)
 	row := r.getExecutor(ctx).QueryRowContext(ctx, query, idBytes[:])
 
-	var idRaw, ownerIDRaw uuid.UUID
+	var idRaw uuid.UUID
 	var acc domain.Account
-	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
+	if err := row.Scan(&idRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // Not found
 		}
 		return nil, err
 	}
 	acc.ID = domain.AccountID(idRaw)
-	acc.OwnerID = domain.OwnerID(ownerIDRaw)
 	return &acc, nil
 }
 
 func (r *MariaDBRepository) GetAccountForUpdate(ctx context.Context, id domain.AccountID) (*domain.Account, error) {
-	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE id = ? FOR UPDATE"
+	query := "SELECT id, balance, can_overdraft FROM accounts WHERE id = ? FOR UPDATE"
 	idBytes := uuid.UUID(id)
 	row := r.getExecutor(ctx).QueryRowContext(ctx, query, idBytes[:])
 
-	var idRaw, ownerIDRaw uuid.UUID
+	var idRaw uuid.UUID
 	var acc domain.Account
-	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
+	if err := row.Scan(&idRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // Not found
 		}
 		return nil, err
 	}
 	acc.ID = domain.AccountID(idRaw)
-	acc.OwnerID = domain.OwnerID(ownerIDRaw)
 	return &acc, nil
 }
 
-func (r *MariaDBRepository) FindByOwnerID(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
-	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE owner_id = ?"
-	ownerIDBytes := uuid.UUID(ownerID)
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, ownerIDBytes[:])
+func (r *MariaDBRepository) ListAccounts(ctx context.Context, filter domain.AccountFilter, sort domain.AccountSort, limit, offset int) ([]*domain.Account, int, error) {
+	// Build WHERE clause dynamically
+	var conditions []string
+	var args []any
 
-	var idRaw, ownerIDRaw uuid.UUID
-	var acc domain.Account
-	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
+	if filter.MinBalance != nil {
+		conditions = append(conditions, "balance >= ?")
+		args = append(args, *filter.MinBalance)
 	}
-	acc.ID = domain.AccountID(idRaw)
-	acc.OwnerID = domain.OwnerID(ownerIDRaw)
-	return &acc, nil
-}
-
-func (r *MariaDBRepository) FindByOwnerIDForUpdate(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
-	query := "SELECT id, owner_id, balance, can_overdraft FROM accounts WHERE owner_id = ? FOR UPDATE"
-	ownerIDBytes := uuid.UUID(ownerID)
-	row := r.getExecutor(ctx).QueryRowContext(ctx, query, ownerIDBytes[:])
-
-	var idRaw, ownerIDRaw uuid.UUID
-	var acc domain.Account
-	if err := row.Scan(&idRaw, &ownerIDRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
+	if filter.MaxBalance != nil {
+		conditions = append(conditions, "balance <= ?")
+		args = append(args, *filter.MaxBalance)
 	}
-	acc.ID = domain.AccountID(idRaw)
-	acc.OwnerID = domain.OwnerID(ownerIDRaw)
-	return &acc, nil
+	if filter.CanOverdraft != nil {
+		conditions = append(conditions, "can_overdraft = ?")
+		args = append(args, *filter.CanOverdraft)
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + conditions[0]
+		for i := 1; i < len(conditions); i++ {
+			whereClause += " AND " + conditions[i]
+		}
+	}
+
+	// Get total count
+	countQuery := "SELECT COUNT(*) FROM accounts " + whereClause
+	var totalCount int
+	if err := r.getExecutor(ctx).QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, 0, err
+	}
+
+	// Build ORDER BY clause (whitelist to prevent SQL injection)
+	orderBy := "id" // default
+	switch sort.Field {
+	case domain.SortByBalance:
+		orderBy = "balance"
+	case domain.SortByAccountID:
+		orderBy = "id"
+	}
+	orderDir := "ASC"
+	if sort.Order == domain.SortDesc {
+		orderDir = "DESC"
+	}
+
+	// Build final query
+	query := fmt.Sprintf(
+		"SELECT id, balance, can_overdraft FROM accounts %s ORDER BY %s %s LIMIT ? OFFSET ?",
+		whereClause, orderBy, orderDir,
+	)
+	args = append(args, limit, offset)
+
+	rows, err := r.getExecutor(ctx).QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var accounts []*domain.Account
+	for rows.Next() {
+		var idRaw uuid.UUID
+		var acc domain.Account
+		if err := rows.Scan(&idRaw, &acc.Balance, &acc.CanOverdraft); err != nil {
+			return nil, 0, err
+		}
+		acc.ID = domain.AccountID(idRaw)
+		accounts = append(accounts, &acc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	return accounts, totalCount, nil
 }
 
 // -- JournalEntryRepository --

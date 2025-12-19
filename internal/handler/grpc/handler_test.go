@@ -38,17 +38,30 @@ func (m *mockAccountRepo) GetAccountForUpdate(ctx context.Context, id domain.Acc
 	return m.FindAccountByID(ctx, id)
 }
 
-func (m *mockAccountRepo) FindByOwnerID(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
+func (m *mockAccountRepo) ListAccounts(ctx context.Context, filter domain.AccountFilter, sort domain.AccountSort, limit, offset int) ([]*domain.Account, int, error) {
+	var result []*domain.Account
 	for _, acc := range m.accounts {
-		if acc.OwnerID == ownerID {
-			return acc, nil
+		if filter.MinBalance != nil && acc.Balance < *filter.MinBalance {
+			continue
+		}
+		if filter.MaxBalance != nil && acc.Balance > *filter.MaxBalance {
+			continue
+		}
+		if filter.CanOverdraft != nil && acc.CanOverdraft != *filter.CanOverdraft {
+			continue
+		}
+		result = append(result, acc)
+	}
+	totalCount := len(result)
+	if offset > len(result) {
+		result = nil
+	} else {
+		result = result[offset:]
+		if limit < len(result) {
+			result = result[:limit]
 		}
 	}
-	return nil, nil
-}
-
-func (m *mockAccountRepo) FindByOwnerIDForUpdate(ctx context.Context, ownerID domain.OwnerID) (*domain.Account, error) {
-	return m.FindByOwnerID(ctx, ownerID)
+	return result, totalCount, nil
 }
 
 type mockJournalEntryRepo struct {
@@ -97,15 +110,11 @@ func TestCornucopiaHandler_CreateAccount(t *testing.T) {
 	uc := usecase.NewAccountUseCase(repo, tm)
 	h := NewCornucopiaHandler(nil, uc)
 
-	ownerIDStr := mustUUID("user-1").String()
-	req := &pb.CreateAccountRequest{OwnerId: ownerIDStr}
+	req := &pb.CreateAccountRequest{CanOverdraft: false}
 
 	resp, err := h.CreateAccount(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.OwnerId != ownerIDStr {
-		t.Errorf("expected owner %s, got %s", ownerIDStr, resp.OwnerId)
 	}
 	if resp.AccountId == "" {
 		t.Error("expected account id")

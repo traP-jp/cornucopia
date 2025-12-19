@@ -14,27 +14,17 @@ func (id AccountID) String() string {
 	return uuid.UUID(id).String()
 }
 
-// OwnerID identifies the owner (user/project) from Pteron.
-type OwnerID uuid.UUID
-
-// String returns the string representation of OwnerID.
-func (id OwnerID) String() string {
-	return uuid.UUID(id).String()
-}
-
 // Account represents a points account.
 type Account struct {
 	ID           AccountID
-	OwnerID      OwnerID
 	Balance      int64
 	CanOverdraft bool
 }
 
 // NewAccount creates a new account with 0 balance.
-func NewAccount(id AccountID, ownerID OwnerID, canOverdraft bool) *Account {
+func NewAccount(id AccountID, canOverdraft bool) *Account {
 	return &Account{
 		ID:           id,
-		OwnerID:      ownerID,
 		Balance:      0,
 		CanOverdraft: canOverdraft,
 	}
