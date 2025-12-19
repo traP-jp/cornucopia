@@ -25,6 +25,37 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Fetch proto file
+        run: |
+          mkdir -p proto
+          curl -fsSL -o proto/cornucopia.proto \
+            https://raw.githubusercontent.com/traP-jp/plutus/main/specs/protobuf/cornucopia.proto
+
+      - name: Generate protobuf code
+        run: |
+          mkdir -p api/protobuf
+          protoc --go_out=api/protobuf --go_opt=paths=source_relative \
+                 --go-grpc_out=api/protobuf --go-grpc_opt=paths=source_relative \
+                 proto/cornucopia.proto
+          cd api/protobuf
+          go mod init github.com/traP-jp/plutus/api/protobuf
+          go mod tidy
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
